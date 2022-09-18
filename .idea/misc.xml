@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="SbtLocalSettings">
+    <option name="projectSyncType">
+      <map>
+        <entry key="$USER_HOME$/code/coursera/wikipedia" value="PREVIEW" />
+        <entry key="$USER_HOME$/code/others/KeYmaeraX-release" value="PREVIEW" />
+        <entry key="$USER_HOME$/code/wesen/wesen-misc/coursera/scala/capstone/observatory" value="PREVIEW" />
+        <entry key="$USER_HOME$/code/wesen/wesen-misc/coursera/scala/functional-design/streams" value="PREVIEW" />
+      </map>
+    </option>
+  </component>
+</project>

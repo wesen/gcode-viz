@@ -1,0 +1,3 @@
+[submodule "vendor/MarlinDocumentation"]
+	path = vendor/MarlinDocumentation
+	url = https://github.com/MarlinFirmware/MarlinDocumentation
