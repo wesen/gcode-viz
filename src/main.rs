@@ -33,7 +33,7 @@ fn main() {
     let s = std::fs::read_to_string(path).unwrap();
     if args.file.ends_with(".gcode") {
         println!("Parsing GCode file: {}", args.file);
-        for i in gcode::parse(s.as_str()).take(50) {
+        for i in gcode::parse(s.as_str()) {
             let opcode = match (i.mnemonic(), i.major_number(), i.minor_number()) {
                 (m, major, 0) => format!("{}{}", m, major),
                 (m, major, minor) => format!("{}{}.{}", m, major, minor),
