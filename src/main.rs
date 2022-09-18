@@ -1,8 +1,8 @@
+use std::path::PathBuf;
+
 use clap::Parser;
-use gray_matter::engine::YAML;
-use gray_matter::Matter;
-use serde::Deserialize;
-use serde_either::SingleOrVec;
+
+mod marlin_docs;
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
@@ -10,81 +10,46 @@ struct Cli {
     /// Name of the GCode file to parse
     #[clap(value_parser)]
     file: String,
-}
 
-#[derive(Debug, Deserialize)]
-#[allow(unused)]
-struct ParameterValue {
-    #[serde(flatten)]
-    tag: Option<String>,
-    #[serde(rename = "type")]
-    type_: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-#[allow(unused)]
-struct Parameter {
-    tag: String,
-    #[serde(default)]
-    optional: bool,
-    #[serde(flatten)]
-    since: Option<String>,
-    description: Option<String>,
-    values: Option<Vec<ParameterValue>>,
-}
-
-#[derive(Debug, Deserialize)]
-#[allow(unused)]
-struct Example {
-    pre: Option<SingleOrVec<String>>,
-    code: SingleOrVec<String>,
-    post: Option<SingleOrVec<String>>,
-}
-
-#[derive(Deserialize, Debug)]
-#[allow(unused)]
-struct OpcodeDescription {
-    tag: String,
-    title: String,
-    brief: String,
-    author: Option<String>,
-
-    experimental: Option<bool>,
-    #[serde(flatten)]
-    since: Option<String>,
-    requires: Option<String>,
-
-    parameters: Option<SingleOrVec<Parameter>>,
-
-    videos: Option<Vec<String>>,
-
-    group: Option<SingleOrVec<String>>,
-    codes: Vec<String>,
-    notes: Option<SingleOrVec<String>>,
-    examples: Option<SingleOrVec<Example>>,
+    /// Name of the directory with marlin documentation
+    #[clap(
+        short,
+        long,
+        value_parser,
+        default_value = "vendor/MarlinDocumentation"
+    )]
+    marlin_docs_dir: String,
 }
 
 fn main() {
     let args = Cli::parse();
 
+    // append /_gcode to the marlin docs dir
+    let gcode_docs_dir = format!("{}/_gcode", args.marlin_docs_dir);
+    // get all files in doc_dir
+    let opcodes = marlin_docs::parse_marlin_docs(gcode_docs_dir);
+
     let path = args.file.clone();
     let s = std::fs::read_to_string(path).unwrap();
     if args.file.ends_with(".gcode") {
         println!("Parsing GCode file: {}", args.file);
-        for i in gcode::parse(s.as_str()).take(10) {
-            println!("{:?}", i);
+        for i in gcode::parse(s.as_str()).take(50) {
+            let opcode = match (i.mnemonic(), i.major_number(), i.minor_number()) {
+                (m, major, 0) => format!("{}{}", m, major),
+                (m, major, minor) => format!("{}{}.{}", m, major, minor),
+            };
+            let span = i.span();
+            let orig = s[span.start..span.end].to_string();
+            if let Some(od) = opcodes.get(&opcode) {
+                println!("{}: {}", opcode, od.title);
+            } else {
+                println!("{}: {}", opcode, "Unknown");
+            }
+            println!("{:?} - {}", opcode, orig);
         }
     } else if args.file.ends_with(".md") {
-        let matter = Matter::<YAML>::new();
-        let result = matter.parse(s.as_str());
-
-        let od: OpcodeDescription = result.data.unwrap().deserialize().unwrap();
+        let od = marlin_docs::parse_opcode_md(PathBuf::from(args.file)).unwrap();
         println!("{:?}", od);
-
-        let _parser = pulldown_cmark::Parser::new(result.content.as_str());
-        // for event in parser {
-        //     println!("{:?}", event);
-        // }
     } else {
         println!("File is not a GCode file");
     }
