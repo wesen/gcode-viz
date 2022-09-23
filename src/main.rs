@@ -1,8 +1,19 @@
+use std::io::stdout;
 use std::path::PathBuf;
+use std::time::Duration;
 
+use crate::app::AppReturn;
+use crate::ui::{Events, InputEvent};
+use app::App;
 use clap::Parser;
+use tui::backend::CrosstermBackend;
+use tui::Terminal;
 
+mod actions;
+mod app;
+mod key;
 mod marlin_docs;
+mod ui;
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
@@ -21,7 +32,39 @@ struct Cli {
     marlin_docs_dir: String,
 }
 
+fn start_ui() -> Result<(), Box<dyn std::error::Error>> {
+    let stdout = stdout();
+    crossterm::terminal::enable_raw_mode()?;
+    let backend = CrosstermBackend::new(stdout);
+    let mut terminal = Terminal::new(backend)?;
+    terminal.clear()?;
+    terminal.hide_cursor()?;
+
+    let app = App::new();
+    let tick_rate = Duration::from_millis(200);
+    let events = Events::new(tick_rate);
+
+    loop {
+        terminal.draw(|rect| ui::draw(rect, &app))?;
+
+        let result = match events.next()? {
+            InputEvent::Input(key) => app.do_action(key),
+            InputEvent::Tick => app.update_on_tick(),
+        };
+        if result == AppReturn::Exit {
+            break;
+        }
+    }
+
+    terminal.clear()?;
+    terminal.show_cursor()?;
+    crossterm::terminal::disable_raw_mode()?;
+
+    Ok(())
+}
+
 fn main() {
+    start_ui().unwrap();
     let args = Cli::parse();
 
     // append /_gcode to the marlin docs dir
