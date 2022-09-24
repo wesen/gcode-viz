@@ -1,19 +1,17 @@
-use std::io::stdout;
-use std::path::PathBuf;
-use std::time::Duration;
-
-use crate::app::AppReturn;
-use crate::ui::{Events, InputEvent};
-use app::App;
+use crate::app::{App, AppReturn};
+use crate::io::{IoAsyncHandler, IoEvent};
 use clap::Parser;
-use tui::backend::CrosstermBackend;
-use tui::Terminal;
+use eyre::Result;
+use std::path::PathBuf;
+use std::sync::Arc;
 
 mod actions;
 mod app;
+mod io;
 mod key;
 mod marlin_docs;
 mod ui;
+mod events;
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
@@ -32,39 +30,24 @@ struct Cli {
     marlin_docs_dir: String,
 }
 
-fn start_ui() -> Result<(), Box<dyn std::error::Error>> {
-    let stdout = stdout();
-    crossterm::terminal::enable_raw_mode()?;
-    let backend = CrosstermBackend::new(stdout);
-    let mut terminal = Terminal::new(backend)?;
-    terminal.clear()?;
-    terminal.hide_cursor()?;
+#[tokio::main]
+async fn main() -> Result<()> {
+    color_eyre::install()?;
 
-    let app = App::new();
-    let tick_rate = Duration::from_millis(200);
-    let events = Events::new(tick_rate);
+    let (sync_io_tx, mut sync_io_rx) = tokio::sync::mpsc::channel::<IoEvent>(100);
 
-    loop {
-        terminal.draw(|rect| ui::draw(rect, &app))?;
+    let app = Arc::new(tokio::sync::Mutex::new(App::new(sync_io_tx.clone())));
 
-        let result = match events.next()? {
-            InputEvent::Input(key) => app.do_action(key),
-            InputEvent::Tick => app.update_on_tick(),
-        };
-        if result == AppReturn::Exit {
-            break;
+    tokio::spawn(async move {
+        let mut handler = IoAsyncHandler::new(app);
+        while let Some(io_event) = sync_io_rx.recv().await {
+            handler.handle_io_event(io_event).await;
         }
-    }
+    });
 
-    terminal.clear()?;
-    terminal.show_cursor()?;
-    crossterm::terminal::disable_raw_mode()?;
+    // TODO(manuel) needs to be async
+    ui::start_ui(&app).await?;
 
-    Ok(())
-}
-
-fn main() {
-    start_ui().unwrap();
     let args = Cli::parse();
 
     // append /_gcode to the marlin docs dir
@@ -96,4 +79,6 @@ fn main() {
     } else {
         println!("File is not a GCode file");
     }
+
+    Ok(())
 }

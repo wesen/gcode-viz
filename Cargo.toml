@@ -7,10 +7,14 @@ edition = "2021"
 
 [dependencies]
 clap = { version = "3.2.22", features = ["derive"] }
+color-eyre = "0.6.2"
 crossterm = "0.25.0"
+eyre = "0.6.8"
 gcode = { version = "0.6.1", features = ["serde"] }
 gray_matter = "0.2.4"
+log = "0.4.17"
 pulldown-cmark = "0.9.2"
 serde = { version = "1.0.144", features = ["derive"] }
 serde_either = "0.2.1"
+tokio = { version = "1.21.1", features = ["full"] }
 tui = "0.19.0"

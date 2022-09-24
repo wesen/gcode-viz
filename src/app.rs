@@ -1,4 +1,5 @@
 use crate::actions::{Action, Actions};
+use crate::io::IoEvent;
 use crate::key::Key;
 use std::time::Duration;
 
@@ -93,6 +94,7 @@ pub struct App {
     actions: Actions,
     /// State
     state: AppState,
+    io_tx: tokio::sync::mpsc::Sender<IoEvent>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -102,10 +104,11 @@ pub enum AppReturn {
 }
 
 impl App {
-    pub fn new() -> Self {
+    pub fn new(io_tx: tokio::sync::mpsc::Sender<IoEvent>) -> Self {
         Self {
             actions: vec![Action::Quit].into(),
             state: AppState::default(),
+            io_tx,
         }
     }
 
@@ -114,6 +117,14 @@ impl App {
             return AppReturn::Exit;
         }
         AppReturn::Continue
+    }
+
+    pub fn dispatch(&self, event: IoEvent) {
+        match event {
+            IoEvent::Sleep(duration) => if self.state.is_initialized() {},
+            IoEvent::Initialize => {}
+        }
+        todo!()
     }
 
     pub fn update_on_tick(&self) -> AppReturn {
