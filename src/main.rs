@@ -73,12 +73,43 @@ where
     I: Iterator<Item = gcode::Line<'input>>,
 {
     fn new(mut lines: I) -> Self {
-        LineIterator {
+        let mut res = LineIterator {
             s: lines,
             current_line: None,
             comments: Vec::new(),
             gcodes: Vec::new(),
+        };
+        res.next_line();
+
+        res
+    }
+
+    fn next_line(&mut self) {
+        self.current_line = self.s.next();
+        if let Some(s) = &self.current_line {
+            self.comments.extend(s.comments().iter().cloned());
+            self.gcodes.extend(s.gcodes().iter().cloned());
         }
+    }
+}
+
+trait PopIf {
+    type Item;
+
+    fn pop_if<F>(&mut self, f: F) -> Option<Self::Item>
+    where
+        F: FnOnce(&Self::Item) -> bool;
+}
+
+impl<A> PopIf for Vec<A> {
+    type Item = A;
+
+    fn pop_if<F>(&mut self, f: F) -> Option<Self::Item>
+    where
+        F: FnOnce(&Self::Item) -> bool,
+    {
+        self.get(0).filter(|x| f(*x))?;
+        self.pop()
     }
 }
 
@@ -95,13 +126,9 @@ where
                 .get(0)
                 .and_then(|x| Some(x.span().line))
                 .unwrap_or(0);
+
             // if there are still comments for previous lines, emit
-            if let Some(x) = l
-                .comments()
-                .iter()
-                .peekable()
-                .next_if(|c| c.span.line <= first_gcode_line)
-            {
+            if let Some(x) = self.comments.pop_if(|c| c.span.line <= first_gcode_line) {
                 return Some(DisplayLine::Comment(x.clone()));
             }
 
@@ -115,10 +142,7 @@ where
             }
 
             // all gcodes emitted, get next line
-            self.current_line = self.s.next();
-            if let Some(l) = &self.current_line {
-                self.gcodes.extend(l.gcodes().iter().cloned());
-            }
+            self.next_line();
         }
 
         None
@@ -143,47 +167,13 @@ async fn main() -> Result<(), eyre::Error> {
         let lines = gcode::full_parse_with_callbacks(s.as_str(), Nop);
         let mut display_lines: Vec<DisplayLine> = Vec::new();
 
-        let mut currentLine: usize = 0;
-        let mut currentComments: Vec<Comment> = Vec::new();
-        let mut currentOpcodes: Vec<gcode::GCode> = Vec::new();
-
-        lines.take(32).for_each(|line| {
-            println!("line: {}", line.span().line);
-
-            line.comments().iter().for_each(|comm| {
-                let commentLine = comm.span.line;
-                if comm.span.line != currentLine {
-                    // flush stored comments
-                }
-                println!(" {} // {}", comm.span.line, comm.value);
-                display_lines.push(DisplayLine::Comment(comm.clone()));
-            });
-
-            line.gcodes().iter().for_each(|i| {
-                let opcode = match (i.mnemonic(), i.major_number(), i.minor_number()) {
-                    (m, major, 0) => format!("{}{}", m, major),
-                    (m, major, minor) => format!("{}{}.{}", m, major, minor),
-                };
-                let span = i.span();
-                let orig = s[span.start..span.end].to_string();
-                // if let Some(od) = opcodes.get(&opcode) {
-                //     println!(" {}: {}", opcode, od.title);
-                // } else {
-                //     println!(" {}: {}", opcode, "Unknown");
-                //                 // if let Some(od) = opcodes.get(&opcode) {
-                //     println!(" {}: {}", opcode, od.title);
-                println!(" {} -- {}", i.span().line, orig);
-                display_lines.push(DisplayLine::GCode(opcode, i.clone()));
-            });
-        });
-        println!("");
-
-        display_lines.iter().for_each(|line| match line {
+        let mut myIterator = LineIterator::new(lines.take(32));
+        myIterator.for_each(|line| match line {
             DisplayLine::Comment(c) => println!("// {}", c.value),
             DisplayLine::GCode(o, opcode) => {
                 let span = opcode.span();
                 let orig = s[span.start..span.end].to_string();
-                if let Some(od) = opcodes.get(o) {
+                if let Some(od) = opcodes.get(o.as_str()) {
                     println!("{}: {}", opcode, od.title);
                 } else {
                     println!("{}: {}", opcode, "Unknown");
