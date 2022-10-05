@@ -35,6 +35,7 @@ impl<A> PopIf for Vec<A> {
     /// x.push(1);
     /// assert_eq!(2, 2);
     /// ```
+    ///
     fn pop_if<F>(&mut self, f: F) -> Option<Self::Item>
     where
         F: FnOnce(&Self::Item) -> bool,

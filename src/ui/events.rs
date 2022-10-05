@@ -1,4 +1,4 @@
-use crate::key::Key;
+use crate::ui::key::Key;
 use crate::ui::InputEvent;
 use log::error;
 use std::sync::atomic::{AtomicBool, Ordering};

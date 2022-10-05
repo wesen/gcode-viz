@@ -1,4 +1,4 @@
-use crate::key::Key;
+use crate::ui::key::Key;
 use std::collections::HashMap;
 use std::fmt;
 use std::fmt::Display;

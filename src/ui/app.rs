@@ -1,7 +1,7 @@
-use crate::actions::{Action, Actions};
-use crate::app::AppState::Initialized;
-use crate::io::IoEvent;
-use crate::key::Key;
+use crate::ui::actions::{Action, Actions};
+use crate::ui::app::AppState::Initialized;
+use crate::ui::io::IoEvent;
+use crate::ui::key::Key;
 use log::{error, warn};
 use std::time::Duration;
 

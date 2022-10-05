@@ -1,9 +1,9 @@
-use crate::app::App;
-use crate::events::Events;
-use crate::io::IoEvent;
-use crate::key::Key;
-use crate::AppReturn;
+use crate::ui::app::AppReturn;
+use app::App;
 use crossterm::event;
+use events::Events;
+use io::IoEvent;
+use key::Key;
 use std::io::stdout;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::Arc;
@@ -14,6 +14,12 @@ use tui::layout::{Alignment, Constraint, Direction, Layout, Rect};
 use tui::style::{Color, Style};
 use tui::widgets::{Block, BorderType, Borders, Paragraph};
 use tui::{Frame, Terminal};
+
+mod actions;
+pub mod app;
+mod events;
+pub mod io;
+mod key;
 
 pub fn draw<B>(rect: &mut Frame<B>, _app: &App)
 where

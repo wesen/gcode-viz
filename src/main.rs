@@ -1,18 +1,14 @@
-use crate::app::{App, AppReturn};
-use crate::io::{IoAsyncHandler, IoEvent};
+use crate::ui::app::App;
+use crate::ui::io::{IoAsyncHandler, IoEvent};
 use clap::Parser;
 use eyre::Result;
 use gcode::{Callbacks, Comment, Nop};
+use gcode_viz::gcode::lines::{DisplayLine, LineIterator};
+use gcode_viz::gcode::marlin_docs;
 use gcode_viz::helpers::PopIf;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-mod actions;
-mod app;
-mod events;
-mod io;
-mod key;
-mod marlin_docs;
 mod ui;
 
 #[derive(Parser, Debug)]
@@ -50,86 +46,6 @@ async fn run_ui() -> Result<(), eyre::Error> {
     Ok(())
 }
 
-struct MyCallbacks {}
-
-impl Callbacks for &MyCallbacks {}
-
-enum DisplayLine<'a> {
-    Comment(gcode::Comment<'a>),
-    GCode(String, gcode::GCode),
-}
-
-struct LineIterator<'input, I>
-where
-    I: Iterator<Item = gcode::Line<'input>>,
-{
-    s: I,
-    current_line: Option<gcode::Line<'input>>,
-    comments: Vec<gcode::Comment<'input>>,
-    gcodes: Vec<gcode::GCode>,
-}
-
-impl<'input, I> LineIterator<'input, I>
-where
-    I: Iterator<Item = gcode::Line<'input>>,
-{
-    fn new(mut lines: I) -> Self {
-        let mut res = LineIterator {
-            s: lines,
-            current_line: None,
-            comments: Vec::new(),
-            gcodes: Vec::new(),
-        };
-        res.next_line();
-
-        res
-    }
-
-    fn next_line(&mut self) {
-        self.current_line = self.s.next();
-        if let Some(s) = &self.current_line {
-            self.comments.extend(s.comments().iter().cloned());
-            self.gcodes.extend(s.gcodes().iter().cloned());
-        }
-    }
-}
-
-impl<'input, I> Iterator for LineIterator<'input, I>
-where
-    I: Iterator<Item = gcode::Line<'input>> + 'input,
-{
-    type Item = DisplayLine<'input>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        while let Some(l) = &self.current_line {
-            let first_gcode_line: usize = self
-                .gcodes
-                .get(0)
-                .and_then(|x| Some(x.span().line))
-                .unwrap_or(0);
-
-            // if there are still comments for previous lines, emit
-            if let Some(x) = self.comments.pop_if(|c| c.span.line <= first_gcode_line) {
-                return Some(DisplayLine::Comment(x.clone()));
-            }
-
-            // emit all gcodes buffered up
-            if let Some(i) = self.gcodes.pop() {
-                let opcode = match (i.mnemonic(), i.major_number(), i.minor_number()) {
-                    (m, major, 0) => format!("{}{}", m, major),
-                    (m, major, minor) => format!("{}{}.{}", m, major, minor),
-                };
-                return Some(DisplayLine::GCode(opcode, i.clone()));
-            }
-
-            // all gcodes emitted, get next line
-            self.next_line();
-        }
-
-        None
-    }
-}
-
 #[tokio::main]
 async fn main() -> Result<(), eyre::Error> {
     color_eyre::install()?;
@@ -146,10 +62,9 @@ async fn main() -> Result<(), eyre::Error> {
     if args.file.ends_with(".gcode") {
         println!("Parsing GCode file: {}", args.file);
         let lines = gcode::full_parse_with_callbacks(s.as_str(), Nop);
-        let mut display_lines: Vec<DisplayLine> = Vec::new();
 
-        let mut myIterator = LineIterator::new(lines.take(32));
-        myIterator.for_each(|line| match line {
+        let mut my_iterator = LineIterator::new(lines.take(32));
+        my_iterator.for_each(|line| match line {
             DisplayLine::Comment(c) => println!("// {}", c.value),
             DisplayLine::GCode(o, opcode) => {
                 let span = opcode.span();
