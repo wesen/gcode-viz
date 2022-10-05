@@ -3,6 +3,7 @@ use crate::io::{IoAsyncHandler, IoEvent};
 use clap::Parser;
 use eyre::Result;
 use gcode::{Callbacks, Comment, Nop};
+use gcode_viz::helpers::PopIf;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -90,26 +91,6 @@ where
             self.comments.extend(s.comments().iter().cloned());
             self.gcodes.extend(s.gcodes().iter().cloned());
         }
-    }
-}
-
-trait PopIf {
-    type Item;
-
-    fn pop_if<F>(&mut self, f: F) -> Option<Self::Item>
-    where
-        F: FnOnce(&Self::Item) -> bool;
-}
-
-impl<A> PopIf for Vec<A> {
-    type Item = A;
-
-    fn pop_if<F>(&mut self, f: F) -> Option<Self::Item>
-    where
-        F: FnOnce(&Self::Item) -> bool,
-    {
-        self.get(0).filter(|x| f(*x))?;
-        self.pop()
     }
 }
 
