@@ -1,4 +1,5 @@
 use crate::app::App;
+use crate::events::Events;
 use crate::io::IoEvent;
 use crate::key::Key;
 use crate::AppReturn;
@@ -56,38 +57,7 @@ pub enum InputEvent {
     Tick,
 }
 
-/// A small event handler that wraps crossterm input and tick events.
-pub struct Events {
-    rx: Receiver<InputEvent>,
-    // Needs to be kept around to prevent disposing the sender side.
-    _tx: Sender<InputEvent>,
-}
-
-impl Events {
-    pub fn new(tick_rate: Duration) -> Events {
-        let (tx, rx) = channel();
-
-        let event_tx = tx.clone();
-        thread::spawn(move || {
-            if event::poll(tick_rate).unwrap() {
-                if let event::Event::Key(keyEvent) = event::read().unwrap() {
-                    let key = Key::from(keyEvent);
-                    event_tx.send(InputEvent::Input(key)).unwrap();
-                }
-            }
-        });
-
-        Events { rx, _tx: tx }
-    }
-
-    /// Attempts to read an event.
-    /// This function blocks the current thread.
-    pub fn next(&self) -> Result<InputEvent, std::sync::mpsc::RecvError> {
-        self.rx.recv()
-    }
-}
-
-pub async fn start_ui(app: Arc<tokio::sync::Mutex<App>>) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn start_ui(app: Arc<tokio::sync::Mutex<App>>) -> Result<(), eyre::Error> {
     let stdout = stdout();
     crossterm::terminal::enable_raw_mode()?;
     let backend = CrosstermBackend::new(stdout);
@@ -96,7 +66,10 @@ pub async fn start_ui(app: Arc<tokio::sync::Mutex<App>>) -> Result<(), Box<dyn s
     terminal.hide_cursor()?;
 
     let tick_rate = Duration::from_millis(200);
-    let events = Events::new(tick_rate);
+
+    // here we should use the async event loop and mpsc
+    // TODO(manuel) new spawns a thread, meh...
+    let mut events = Events::new(tick_rate);
 
     {
         let mut app = app.lock().await;
@@ -108,12 +81,12 @@ pub async fn start_ui(app: Arc<tokio::sync::Mutex<App>>) -> Result<(), Box<dyn s
 
         terminal.draw(|rect| draw(rect, &app))?;
 
-        // TODO(manuel) needs to be async
-        let result = match events.next()? {
-            InputEvent::Input(key) => app.do_action(key),
+        let result = match events.next().await {
+            InputEvent::Input(key) => app.do_action(key).await,
             InputEvent::Tick => app.update_on_tick(),
         };
         if result == AppReturn::Exit {
+            events.close();
             break;
         }
     }

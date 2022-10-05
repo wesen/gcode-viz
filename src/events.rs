@@ -20,6 +20,9 @@ impl Events {
     pub fn new(tick_rate: Duration) -> Events {
         let (tx, rx) = tokio::sync::mpsc::channel::<InputEvent>(100);
         let stop_capture = Arc::new(AtomicBool::new(false));
+        let stop_capture_clone = Arc::clone(&stop_capture);
+        // keep tx alive I guess, since its scope outlives the thread
+        let _tx = tx.clone();
 
         tokio::spawn(async move {
             loop {
@@ -34,7 +37,7 @@ impl Events {
                 if let Err(err) = tx.send(InputEvent::Tick).await {
                     error!("Ooops!, {}", err);
                 }
-                if stop_capture.load(Ordering::Relaxed) {
+                if stop_capture_clone.load(Ordering::Relaxed) {
                     break;
                 }
             }
@@ -42,8 +45,16 @@ impl Events {
 
         Events {
             rx,
-            _tx: tx,
+            _tx,
             stop_capture,
         }
+    }
+
+    pub async fn next(&mut self) -> InputEvent {
+        self.rx.recv().await.unwrap_or(InputEvent::Tick)
+    }
+
+    pub fn close(&mut self) {
+        self.stop_capture.store(true, Ordering::Relaxed);
     }
 }

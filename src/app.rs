@@ -1,6 +1,8 @@
 use crate::actions::{Action, Actions};
+use crate::app::AppState::Initialized;
 use crate::io::IoEvent;
 use crate::key::Key;
+use log::{error, warn};
 use std::time::Duration;
 
 #[derive(Clone)]
@@ -95,6 +97,7 @@ pub struct App {
     /// State
     state: AppState,
     io_tx: tokio::sync::mpsc::Sender<IoEvent>,
+    is_loading: bool,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -109,25 +112,54 @@ impl App {
             actions: vec![Action::Quit].into(),
             state: AppState::default(),
             io_tx,
+            is_loading: false,
         }
     }
 
-    pub fn do_action(&self, key: Key) -> AppReturn {
-        if key == Key::Esc {
-            return AppReturn::Exit;
+    pub async fn do_action(&mut self, key: Key) -> AppReturn {
+        if let Some(action) = self.actions.find(key) {
+            match action {
+                Action::Quit => AppReturn::Exit,
+                Action::Sleep => {
+                    if let Some(duration) = self.state.duration() {
+                        self.dispatch(IoEvent::Sleep(duration)).await
+                    }
+                    AppReturn::Continue
+                }
+                Action::IncrementDelay => {
+                    self.state.increment_delay();
+                    AppReturn::Continue
+                }
+                Action::DecrementDelay => {
+                    self.state.decrement_delay();
+                    AppReturn::Continue
+                }
+            }
+        } else {
+            warn!("No action associated with {}", key);
+            AppReturn::Continue
         }
+    }
+
+    pub fn is_loading(&self) -> bool {
+        self.is_loading
+    }
+
+    /// Send an event to the IO thread
+    pub async fn dispatch(&mut self, event: IoEvent) {
+        self.is_loading = true;
+        if let Err(e) = self.io_tx.send(event).await {
+            self.is_loading = false;
+            error!("Error from dispatch: {}", e);
+        }
+    }
+
+    pub fn update_on_tick(&mut self) -> AppReturn {
+        self.state.incr_tick();
         AppReturn::Continue
     }
 
-    pub fn dispatch(&self, event: IoEvent) {
-        match event {
-            IoEvent::Sleep(duration) => if self.state.is_initialized() {},
-            IoEvent::Initialize => {}
-        }
-        todo!()
-    }
-
-    pub fn update_on_tick(&self) -> AppReturn {
-        AppReturn::Continue
+    pub fn initialized(&mut self) {
+        self.state = AppState::initialized();
     }
 }
